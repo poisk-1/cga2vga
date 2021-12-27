@@ -96,6 +96,12 @@ local.properties
 # sbteclipse plugin
 .target
 
+.vscode
+**/.bloop
+**/.metals
+project/metals.sbt
+project/project
+
 # TeXlipse plugin
 .texlipse
 ### C template
