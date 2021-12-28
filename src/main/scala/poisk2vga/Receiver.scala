@@ -50,6 +50,6 @@ class Receiver(
     waitForSync()
   }
 
-  io.address <> (dataLength.U - counter)
-  io.valid <> valid
+  io.address := (dataLength.U - counter)
+  io.valid := valid
 }
