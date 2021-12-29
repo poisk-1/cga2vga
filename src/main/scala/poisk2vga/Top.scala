@@ -51,7 +51,7 @@ class Top extends RawModule {
     val hValid = Wire(Bool())
 
     val hCapture = Module(
-      new Receiver(H_SYNC, 1, H_BPORCH_ADJ + H_ACTIVE, H_POLARITY)
+      new Capture(H_SYNC, 1, H_BPORCH_ADJ + H_ACTIVE, H_POLARITY)
     )
 
     hCapture.io.sync := hSync
@@ -62,7 +62,7 @@ class Top extends RawModule {
     withClock(hCapture.io.valid.asClock) {
       val vCapture =
         Module(
-          new Receiver(
+          new Capture(
             V_SYNC,
             1,
             V_BPORCH_ADJ + V_ACTIVE,

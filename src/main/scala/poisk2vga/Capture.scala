@@ -3,14 +3,14 @@ package poisk2vga
 import chisel3._
 import chisel3.util.log2Ceil
 
-class Receiver(
+class Capture(
     syncLength: Int,
-    syncSkew: Int,
+    syncSlack: Int,
     dataLength: Int,
     polarity: Boolean
 ) extends Module {
-  require((syncLength - syncSkew) >= 1)
-  require(syncSkew >= 0)
+  require((syncLength - syncSlack) >= 1)
+  require(syncSlack >= 0)
   require(dataLength >= 2)
 
   val io = IO(new Bundle {
@@ -19,7 +19,9 @@ class Receiver(
     val valid = Output(Bool())
   })
 
-  val counter = RegInit(0.U(log2Ceil(Math.max((syncLength + syncSkew), dataLength) + 1).W))
+  val counter = RegInit(
+    0.U(log2Ceil(Math.max((syncLength + syncSlack), dataLength) + 1).W)
+  )
   val valid = RegInit(false.B)
 
   val sync = RegNext(io.sync, (!polarity).B)
@@ -29,7 +31,7 @@ class Receiver(
 
   def waitForSync() =
     when(isStartEdge) {
-      counter := (syncLength + syncSkew).U
+      counter := (syncLength + syncSlack).U
     }
 
   when(counter =/= 0.U) {
@@ -41,7 +43,7 @@ class Receiver(
         waitForSync()
       }
     }.elsewhen(isEndEdge) {
-      when(counter >= 1.U && counter <= (1 + syncSkew * 2).U) {
+      when(counter >= 1.U && counter <= (1 + syncSlack * 2).U) {
         valid := true.B
         counter := dataLength.U
       }.otherwise {

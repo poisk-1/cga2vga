@@ -6,7 +6,7 @@ import chisel3._
 import chisel3.tester._
 import org.scalatest.flatspec.AnyFlatSpec
 
-class ReceiverSpec extends AnyFlatSpec with ReceiverTester {
+class CaptureSpec extends AnyFlatSpec with CaptureTester {
   it should behave like receiver(1, 0, 2, true)
   it should behave like receiver(1, 0, 2, false)
   it should behave like receiver(13, 1, 234, true)
@@ -15,9 +15,9 @@ class ReceiverSpec extends AnyFlatSpec with ReceiverTester {
   it should behave like receiver(234, 13, 13, false)
 }
 
-trait ReceiverTester extends ChiselScalatestTester { this: AnyFlatSpec =>
-  private def readAddressSeq(dut: Receiver): Seq[BigInt] = {
-    while (dut.io.valid.peek().litValue == 0) dut.clock.step()
+trait CaptureTester extends ChiselScalatestTester { this: AnyFlatSpec =>
+  private def readAddressSeq(dut: Capture): Seq[BigInt] = {
+    while (!dut.io.valid.peek().litToBoolean) dut.clock.step()
 
     Iterator
       .continually {
@@ -25,16 +25,16 @@ trait ReceiverTester extends ChiselScalatestTester { this: AnyFlatSpec =>
         dut.clock.step()
         (valid, address)
       }
-      .takeWhile { case (valid, _) => valid.litValue == 1 }
+      .takeWhile(_._1.litToBoolean)
       .map(_._2.litValue)
       .toSeq
   }
 
-  private def assertAddressSeq(dut: Receiver, dataLength: Int) = assert(
+  private def assertAddressSeq(dut: Capture, dataLength: Int) = assert(
     readAddressSeq(dut) == (0 until dataLength)
   )
 
-  private def assertInvalid(dut: Receiver, cycles: Int) = {
+  private def assertInvalid(dut: Capture, cycles: Int) = {
     for (_ <- 0 until cycles) {
       assert(dut.io.valid.peek().litValue == 0)
       dut.clock.step()
@@ -42,7 +42,7 @@ trait ReceiverTester extends ChiselScalatestTester { this: AnyFlatSpec =>
   }
 
   private def writeSynqSeq(
-      dut: Receiver,
+      dut: Capture,
       syncLength: Int,
       dataLength: Int,
       polarity: Boolean
@@ -58,23 +58,23 @@ trait ReceiverTester extends ChiselScalatestTester { this: AnyFlatSpec =>
 
   def receiver(
       syncLength: Int,
-      syncSkew: Int,
+      syncSlack: Int,
       dataLength: Int,
       polarity: Boolean,
       invalidCycles: Int = 600
   ): Unit = {
-    behavior of s"receiver(syncLength=$syncLength, syncSkew=$syncSkew, dataLength=$dataLength, polarity=$polarity)"
+    behavior of s"capture(syncLength=$syncLength, syncSlack=$syncSlack, dataLength=$dataLength, polarity=$polarity)"
 
     it should "latch on sync" in {
-      test(new Receiver(syncLength, syncSkew, dataLength, polarity)) { dut =>
+      test(new Capture(syncLength, syncSlack, dataLength, polarity)) { dut =>
         parallel(
           {
             dut.io.sync.poke((!polarity).B)
             dut.clock.step()
 
-            writeSynqSeq(dut, syncLength - syncSkew, dataLength, polarity)
+            writeSynqSeq(dut, syncLength - syncSlack, dataLength, polarity)
             writeSynqSeq(dut, syncLength, dataLength, polarity)
-            writeSynqSeq(dut, syncLength + syncSkew, dataLength, polarity)
+            writeSynqSeq(dut, syncLength + syncSlack, dataLength, polarity)
           }, {
             assertAddressSeq(dut, dataLength)
             assertAddressSeq(dut, dataLength)
@@ -86,15 +86,15 @@ trait ReceiverTester extends ChiselScalatestTester { this: AnyFlatSpec =>
     }
 
     it should "skip short and long sync" in {
-      test(new Receiver(syncLength, syncSkew, dataLength, polarity)) { dut =>
+      test(new Capture(syncLength, syncSlack, dataLength, polarity)) { dut =>
         parallel(
           {
             dut.io.sync.poke((!polarity).B)
             dut.clock.step()
 
-            writeSynqSeq(dut, syncLength - (syncSkew + 1), dataLength, polarity)
+            writeSynqSeq(dut, syncLength - (syncSlack + 1), dataLength, polarity)
             writeSynqSeq(dut, syncLength, dataLength, polarity)
-            writeSynqSeq(dut, syncLength + (syncSkew + 1), dataLength, polarity)
+            writeSynqSeq(dut, syncLength + (syncSlack + 1), dataLength, polarity)
           }, {
             assertAddressSeq(dut, dataLength)
             assertInvalid(dut, invalidCycles)
@@ -104,15 +104,15 @@ trait ReceiverTester extends ChiselScalatestTester { this: AnyFlatSpec =>
     }
 
     it should "skip truncated data" in {
-      test(new Receiver(syncLength, syncSkew, dataLength, polarity)) { dut =>
+      test(new Capture(syncLength, syncSlack, dataLength, polarity)) { dut =>
         parallel(
           {
             dut.io.sync.poke((!polarity).B)
             dut.clock.step()
 
-            writeSynqSeq(dut, syncLength - syncSkew, dataLength, polarity)
+            writeSynqSeq(dut, syncLength - syncSlack, dataLength, polarity)
             writeSynqSeq(dut, syncLength, dataLength - 1, polarity)
-            writeSynqSeq(dut, syncLength + syncSkew, dataLength, polarity)
+            writeSynqSeq(dut, syncLength + syncSlack, dataLength, polarity)
           }, {
             assertAddressSeq(dut, dataLength)
             assertAddressSeq(dut, dataLength)
