@@ -5,10 +5,12 @@ import chisel3.util.log2Ceil
 
 class Receiver(
     syncLength: Int,
+    syncSkew: Int,
     dataLength: Int,
     polarity: Boolean
 ) extends Module {
-  require(syncLength >= 1)
+  require((syncLength - syncSkew) >= 1)
+  require(syncSkew >= 0)
   require(dataLength >= 2)
 
   val io = IO(new Bundle {
@@ -17,18 +19,17 @@ class Receiver(
     val valid = Output(Bool())
   })
 
-  val counter = RegInit(0.U(log2Ceil(syncLength + dataLength).W))
+  val counter = RegInit(0.U(log2Ceil(Math.max((syncLength + syncSkew), dataLength) + 1).W))
   val valid = RegInit(false.B)
 
-  val futureSync = RegNext(RegNext(io.sync, polarity.B), polarity.B)
-  val sync = RegNext(futureSync, polarity.B)
+  val sync = RegNext(io.sync, (!polarity).B)
 
-  def isStartEdge = sync =/= polarity.B && futureSync === polarity.B
-  def isEndEdge = sync === polarity.B && futureSync =/= polarity.B
+  def isStartEdge = sync =/= polarity.B && io.sync === polarity.B
+  def isEndEdge = sync === polarity.B && io.sync =/= polarity.B
 
   def waitForSync() =
     when(isStartEdge) {
-      counter := (syncLength + dataLength).U
+      counter := (syncLength + syncSkew).U
     }
 
   when(counter =/= 0.U) {
@@ -40,8 +41,9 @@ class Receiver(
         waitForSync()
       }
     }.elsewhen(isEndEdge) {
-      when(counter === (dataLength + 1).U) {
+      when(counter >= 1.U && counter <= (1 + syncSkew * 2).U) {
         valid := true.B
+        counter := dataLength.U
       }.otherwise {
         counter := 0.U
       }
