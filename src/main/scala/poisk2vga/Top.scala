@@ -31,8 +31,8 @@ class Top extends RawModule {
   val CAP_V_TOTAL = CAP_V_FPORCH + CAP_V_SYNC + CAP_V_BPORCH + CAP_V_ACTIVE
 
   // Adjusted for receiver delay
-  val H_BPORCH_ADJ = CAP_H_BPORCH - 1
-  val V_BPORCH_ADJ = CAP_V_BPORCH - 1
+  val CAP_H_BPORCH_ADJ = CAP_H_BPORCH - 1
+  val CAP_V_BPORCH_ADJ = CAP_V_BPORCH - 1
 
   val io = IO(new Bundle {
     val reset = Input(Bool())
@@ -92,13 +92,18 @@ class Top extends RawModule {
     val hValid = Wire(Bool())
 
     val hCap = Module(
-      new Capture(CAP_H_SYNC, 1, H_BPORCH_ADJ + CAP_H_ACTIVE, CAP_H_POLARITY)
+      new Capture(
+        CAP_H_SYNC,
+        1,
+        CAP_H_BPORCH_ADJ + CAP_H_ACTIVE,
+        CAP_H_POLARITY
+      )
     )
 
     hCap.io.sync := hSync
 
-    hAddress := hCap.io.address - H_BPORCH_ADJ.U
-    hValid := hCap.io.valid && (hCap.io.address >= H_BPORCH_ADJ.U)
+    hAddress := hCap.io.address - CAP_H_BPORCH_ADJ.U
+    hValid := hCap.io.valid && (hCap.io.address >= CAP_H_BPORCH_ADJ.U)
 
     withClock(hSync.asClock) {
       val vCap =
@@ -106,15 +111,15 @@ class Top extends RawModule {
           new Capture(
             CAP_V_SYNC,
             1,
-            V_BPORCH_ADJ + CAP_V_ACTIVE,
+            CAP_V_BPORCH_ADJ + CAP_V_ACTIVE,
             CAP_V_POLARITY
           )
         )
 
       vCap.io.sync := vSync
 
-      vAddress := vCap.io.address - V_BPORCH_ADJ.U
-      vValid := vCap.io.valid && (vCap.io.address >= V_BPORCH_ADJ.U)
+      vAddress := vCap.io.address - CAP_V_BPORCH_ADJ.U
+      vValid := vCap.io.valid && (vCap.io.address >= CAP_V_BPORCH_ADJ.U)
     }
 
     frameBuffer.io.ena := vValid && hValid
@@ -204,14 +209,11 @@ class Top extends RawModule {
     assignChannel(green, 1)
     assignChannel(blue, 2)
 
-    for (i <- 0 until 4)
+    for (i <- 0 until 4) {
       io.genPmodGreenSync.pins(i).O := green(i)
-
-    for (i <- 0 until 4)
       io.genPmodRedBlue.pins(i).O := red(i)
-
-    for (i <- 0 until 4)
       io.genPmodRedBlue.pins(i + 4).O := blue(i)
+    }
   }
 }
 
