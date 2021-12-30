@@ -2,101 +2,216 @@ package poisk2vga
 
 import chisel3._
 import chisel3.util.log2Ceil
+import chisel3.util.Cat
+import chisel3.util.Fill
+
+class PMODPin extends Bundle {
+  val I = Input(Bool())
+  val O = Output(Bool())
+  val T = Output(Bool())
+}
+
+class PMOD extends Bundle {
+  val pins = Vec(8, new PMODPin())
+}
 
 class Top extends RawModule {
-  val H_POLARITY = false
-  val H_SYNC = 112
-  val H_BPORCH = 144
-  val H_FPORCH = 64
-  val H_ACTIVE = 640
-  val H_TOTAL = H_FPORCH + H_SYNC + H_BPORCH + H_ACTIVE
+  val CAP_H_POLARITY = false
+  val CAP_H_SYNC = 112
+  val CAP_H_BPORCH = 144
+  val CAP_H_FPORCH = 64
+  val CAP_H_ACTIVE = 640
+  val CAP_H_TOTAL = CAP_H_FPORCH + CAP_H_SYNC + CAP_H_BPORCH + CAP_H_ACTIVE
 
-  val V_POLARITY = false
-  val V_SYNC = 9
-  val V_BPORCH = 52
-  val V_FPORCH = 54
-  val V_ACTIVE = 200
-  val V_TOTAL = V_FPORCH + V_SYNC + V_BPORCH + V_ACTIVE
+  val CAP_V_POLARITY = false
+  val CAP_V_SYNC = 9
+  val CAP_V_BPORCH = 52
+  val CAP_V_FPORCH = 54
+  val CAP_V_ACTIVE = 200
+  val CAP_V_TOTAL = CAP_V_FPORCH + CAP_V_SYNC + CAP_V_BPORCH + CAP_V_ACTIVE
 
   // Adjusted for receiver delay
-  val H_BPORCH_ADJ = H_BPORCH - 1
-  val V_BPORCH_ADJ = V_BPORCH - 1
+  val H_BPORCH_ADJ = CAP_H_BPORCH - 1
+  val V_BPORCH_ADJ = CAP_V_BPORCH - 1
 
   val io = IO(new Bundle {
     val reset = Input(Bool())
-    val capClock = Input(Clock())
+
     val genClock = Input(Clock())
-    val syncGpio = Input(UInt(4.W))
-    val rgbiGpio = Input(UInt(4.W))
-    val address = Output(UInt(log2Ceil(H_ACTIVE * V_ACTIVE).W))
-    val rgbi = Output(UInt(4.W))
+    val genPmodGreenSync = new PMOD()
+    val genPmodRedBlue = new PMOD()
+
+    val capClock = Input(Clock())
+    val capPmod = new PMOD()
   })
 
-  val frameBuffer = Module(new RAM(4, H_ACTIVE * V_ACTIVE))
+  for (i <- 0 until 8) {
+    io.capPmod.pins(i).T := true.B
+    io.capPmod.pins(i).O := false.B
+    io.genPmodGreenSync.pins(i).T := false.B
+    io.genPmodRedBlue.pins(i).T := false.B
+  }
+
+  val frameBuffer = Module(new RAM(4, CAP_H_ACTIVE * CAP_V_ACTIVE))
 
   frameBuffer.io.clka := io.capClock
   frameBuffer.io.clkb := io.genClock
 
   withClockAndReset(io.capClock, io.reset) {
     val hSync =
-      RegNext(RegNext(io.syncGpio(0), (!H_POLARITY).B), (!H_POLARITY).B)
+      RegNext(
+        RegNext(io.capPmod.pins(0).I, (!CAP_H_POLARITY).B),
+        (!CAP_H_POLARITY).B
+      )
     val vSync =
-      RegNext(RegNext(io.syncGpio(1), (!V_POLARITY).B), (!V_POLARITY).B)
-    val rgbi = RegNext(RegNext(RegNext(io.rgbiGpio, 0.U), 0.U), 0.U)
+      RegNext(
+        RegNext(io.capPmod.pins(1).I, (!CAP_V_POLARITY).B),
+        (!CAP_V_POLARITY).B
+      )
+    val rgbi =
+      RegNext(
+        RegNext(
+          RegNext(
+            Cat(
+              io.capPmod.pins(7).I,
+              io.capPmod.pins(6).I,
+              io.capPmod.pins(5).I,
+              io.capPmod.pins(4).I
+            ),
+            0.U
+          ),
+          0.U
+        ),
+        0.U
+      )
 
-    val vAddress = Wire(UInt(log2Ceil(V_ACTIVE).W))
-    val hAddress = Wire(UInt(log2Ceil(H_ACTIVE).W))
+    val vAddress = Wire(UInt(log2Ceil(CAP_V_ACTIVE).W))
+    val hAddress = Wire(UInt(log2Ceil(CAP_H_ACTIVE).W))
 
     val vValid = Wire(Bool())
     val hValid = Wire(Bool())
 
-    val hCapture = Module(
-      new Capture(H_SYNC, 1, H_BPORCH_ADJ + H_ACTIVE, H_POLARITY)
+    val hCap = Module(
+      new Capture(CAP_H_SYNC, 1, H_BPORCH_ADJ + CAP_H_ACTIVE, CAP_H_POLARITY)
     )
 
-    hCapture.io.sync := hSync
+    hCap.io.sync := hSync
 
-    hAddress := hCapture.io.address - H_BPORCH_ADJ.U
-    hValid := hCapture.io.valid && (hCapture.io.address >= H_BPORCH_ADJ.U)
+    hAddress := hCap.io.address - H_BPORCH_ADJ.U
+    hValid := hCap.io.valid && (hCap.io.address >= H_BPORCH_ADJ.U)
 
-    withClock(hCapture.io.valid.asClock) {
-      val vCapture =
+    withClock(hSync.asClock) {
+      val vCap =
         Module(
           new Capture(
-            V_SYNC,
+            CAP_V_SYNC,
             1,
-            V_BPORCH_ADJ + V_ACTIVE,
-            V_POLARITY
+            V_BPORCH_ADJ + CAP_V_ACTIVE,
+            CAP_V_POLARITY
           )
         )
 
-      vCapture.io.sync := vSync
+      vCap.io.sync := vSync
 
-      vAddress := vCapture.io.address - V_BPORCH_ADJ.U
-      vValid := vCapture.io.valid && (vCapture.io.address >= V_BPORCH_ADJ.U)
+      vAddress := vCap.io.address - V_BPORCH_ADJ.U
+      vValid := vCap.io.valid && (vCap.io.address >= V_BPORCH_ADJ.U)
     }
 
     frameBuffer.io.ena := vValid && hValid
     frameBuffer.io.wea := vValid && hValid
-    frameBuffer.io.addra := vAddress * H_ACTIVE.U + hAddress
+    frameBuffer.io.addra := vAddress * CAP_H_ACTIVE.U + hAddress
     frameBuffer.io.dia := rgbi
   }
 
   withClockAndReset(io.genClock, io.reset) {
-    val genAddress = RegInit(UInt(log2Ceil(H_ACTIVE * V_ACTIVE).W), 0.U)
+    val GEN_H_POLARITY = false
+    val GEN_H_SYNC = 96
+    val GEN_H_BPORCH = 48
+    val GEN_H_FPORCH = 16
+    val GEN_H_ACTIVE = 640
 
-    when(genAddress === (H_ACTIVE * V_ACTIVE - 1).U) {
-      genAddress := 0.U
-    }.otherwise {
-      genAddress := genAddress + 1.U
+    val GEN_V_POLARITY = false
+    val GEN_V_SYNC = 2
+    val GEN_V_BPORCH = 33
+    val GEN_V_FPORCH = 10
+    val GEN_V_ACTIVE = 480
+
+    // Adjusted to fit captured frame
+    val GEN_V_ACTIVE_ADJ = CAP_V_ACTIVE * 2
+    val GEN_V_BPORCH_ADJ = GEN_V_BPORCH + (GEN_V_ACTIVE - GEN_V_ACTIVE_ADJ) / 2
+    val GEN_V_FPORCH_ADJ = GEN_V_FPORCH + (GEN_V_ACTIVE - GEN_V_ACTIVE_ADJ) / 2
+
+    val vAddress = Wire(UInt(log2Ceil(GEN_V_ACTIVE_ADJ).W))
+    val hAddress = Wire(UInt(log2Ceil(GEN_H_ACTIVE).W))
+
+    val vValid = Wire(Bool())
+    val hValid = Wire(Bool())
+
+    val hGen = Module(
+      new Generator(
+        GEN_H_SYNC,
+        GEN_H_BPORCH + GEN_H_ACTIVE + GEN_H_FPORCH,
+        GEN_H_POLARITY
+      )
+    )
+
+    io.genPmodGreenSync.pins(4).O := hGen.io.sync
+
+    hAddress := hGen.io.address - GEN_H_BPORCH.U
+    hValid := hGen.io.valid && (hGen.io.address >= GEN_H_BPORCH.U) && (hGen.io.address < (GEN_H_BPORCH + GEN_H_ACTIVE).U)
+
+    withClock((!hGen.io.sync).asClock) {
+      val vGen =
+        Module(
+          new Generator(
+            GEN_V_SYNC,
+            GEN_V_BPORCH_ADJ + GEN_V_ACTIVE_ADJ + GEN_V_FPORCH_ADJ,
+            GEN_V_POLARITY
+          )
+        )
+
+      io.genPmodGreenSync.pins(5).O := vGen.io.sync
+
+      vAddress := vGen.io.address - GEN_V_BPORCH_ADJ.U
+      vValid := vGen.io.valid && (vGen.io.address >= GEN_V_BPORCH_ADJ.U) && (vGen.io.address < (GEN_V_BPORCH_ADJ + GEN_V_ACTIVE_ADJ).U)
     }
 
-    frameBuffer.io.enb := true.B
-    frameBuffer.io.web := false.B
-    frameBuffer.io.addrb := genAddress
+    io.genPmodGreenSync.pins(6).O := false.B
+    io.genPmodGreenSync.pins(7).O := false.B
 
-    io.rgbi := frameBuffer.io.dob
-    io.address := genAddress
+    frameBuffer.io.enb := vValid && hValid
+    frameBuffer.io.web := false.B
+    frameBuffer.io.addrb := ((vAddress >> 1) * GEN_H_ACTIVE.U + hAddress)
+
+    val green = Wire(UInt(4.W))
+    val red = Wire(UInt(4.W))
+    val blue = Wire(UInt(4.W))
+
+    def assignChannel(channel: UInt, i: Int) =
+      when(vValid && hValid) {
+        val rgbi = frameBuffer.io.dob
+
+        when(rgbi(3) === true.B) {
+          channel := Fill(4, rgbi(i))
+        }.otherwise {
+          channel := Cat(0.U, Fill(2, rgbi(0)))
+        }
+      }.otherwise {
+        channel := 0.U
+      }
+
+    assignChannel(red, 0)
+    assignChannel(green, 1)
+    assignChannel(blue, 2)
+
+    for (i <- 0 until 4)
+      io.genPmodGreenSync.pins(i).O := green(i)
+
+    for (i <- 0 until 4)
+      io.genPmodRedBlue.pins(i).O := red(i)
+
+    for (i <- 0 until 4)
+      io.genPmodRedBlue.pins(i + 4).O := blue(i)
   }
 }
 
