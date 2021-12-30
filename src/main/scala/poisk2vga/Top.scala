@@ -194,7 +194,7 @@ class Top extends RawModule {
         when(rgbi(3) === true.B) {
           channel := Fill(4, rgbi(i))
         }.otherwise {
-          channel := Cat(0.U, Fill(2, rgbi(0)))
+          channel := Cat(0.U, Fill(3, rgbi(i)))
         }
       }.otherwise {
         channel := 0.U
