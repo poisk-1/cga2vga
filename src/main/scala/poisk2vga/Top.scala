@@ -4,6 +4,7 @@ import chisel3._
 import chisel3.util.log2Ceil
 import chisel3.util.Cat
 import chisel3.util.Fill
+import chisel3.util.log2Floor
 
 class PMODPin extends Bundle {
   val I = Input(Bool())
@@ -16,6 +17,19 @@ class PMOD extends Bundle {
 }
 
 class Top extends RawModule {
+  val io = IO(new Bundle {
+    val reset = Input(Bool())
+
+    // 25 MHz
+    val genClock = Input(Clock())
+    val genPmodGreenSync = new PMOD()
+    val genPmodRedBlue = new PMOD()
+
+    // 15 MHz * CAP_CLOCK_MULTIPLE
+    val capClock = Input(Clock())
+    val capPmod = new PMOD()
+  })
+
   val CAP_H_POLARITY = false
   val CAP_H_SYNC = 112
   val CAP_H_BPORCH = 144
@@ -34,16 +48,7 @@ class Top extends RawModule {
   val CAP_H_BPORCH_ADJ = CAP_H_BPORCH - 1
   val CAP_V_BPORCH_ADJ = CAP_V_BPORCH - 1
 
-  val io = IO(new Bundle {
-    val reset = Input(Bool())
-
-    val genClock = Input(Clock())
-    val genPmodGreenSync = new PMOD()
-    val genPmodRedBlue = new PMOD()
-
-    val capClock = Input(Clock())
-    val capPmod = new PMOD()
-  })
+  val CAP_CLOCK_MULTIPLE = 2
 
   for (i <- 0 until 8) {
     io.capPmod.pins(i).T := true.B
@@ -93,17 +98,21 @@ class Top extends RawModule {
 
     val hCap = Module(
       new Capture(
-        CAP_H_SYNC,
+        CAP_H_SYNC * CAP_CLOCK_MULTIPLE,
         1,
-        CAP_H_BPORCH_ADJ + CAP_H_ACTIVE,
+        (CAP_H_BPORCH_ADJ + CAP_H_ACTIVE) * CAP_CLOCK_MULTIPLE,
         CAP_H_POLARITY
       )
     )
 
     hCap.io.sync := hSync
 
-    hAddress := hCap.io.address - CAP_H_BPORCH_ADJ.U
-    hValid := hCap.io.valid && (hCap.io.address >= CAP_H_BPORCH_ADJ.U)
+    hAddress := (hCap.io.address - (CAP_H_BPORCH_ADJ * CAP_CLOCK_MULTIPLE).U) >> log2Ceil(
+      CAP_CLOCK_MULTIPLE
+    )
+    hValid := hCap.io.valid &&
+      (hCap.io.address >= (CAP_H_BPORCH_ADJ * CAP_CLOCK_MULTIPLE).U) &&
+      !hCap.io.address(0)
 
     withClock(hSync.asClock) {
       val vCap =
@@ -142,7 +151,8 @@ class Top extends RawModule {
     val GEN_V_ACTIVE = 480
 
     // Adjusted to fit captured frame
-    val GEN_V_ACTIVE_ADJ = CAP_V_ACTIVE * 2
+    val GEN_TO_CAP_V_RATIO = 2
+    val GEN_V_ACTIVE_ADJ = CAP_V_ACTIVE * GEN_TO_CAP_V_RATIO
     val GEN_V_BPORCH_ADJ = GEN_V_BPORCH + (GEN_V_ACTIVE - GEN_V_ACTIVE_ADJ) / 2
     val GEN_V_FPORCH_ADJ = GEN_V_FPORCH + (GEN_V_ACTIVE - GEN_V_ACTIVE_ADJ) / 2
 
@@ -186,7 +196,7 @@ class Top extends RawModule {
 
     frameBuffer.io.enb := vValid && hValid
     frameBuffer.io.web := false.B
-    frameBuffer.io.addrb := ((vAddress >> 1) * GEN_H_ACTIVE.U + hAddress)
+    frameBuffer.io.addrb := ((vAddress >> log2Ceil(GEN_TO_CAP_V_RATIO)) * GEN_H_ACTIVE.U + hAddress)
 
     val green = Wire(UInt(4.W))
     val red = Wire(UInt(4.W))
