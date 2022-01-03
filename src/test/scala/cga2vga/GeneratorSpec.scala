@@ -1,4 +1,4 @@
-package poisk2vga
+package cga2vga
 
 import scala.collection.Seq
 

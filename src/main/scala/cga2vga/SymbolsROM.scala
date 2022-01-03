@@ -1,4 +1,4 @@
-package poisk2vga
+package cga2vga
 
 import chisel3._
 import chisel3.util.HasBlackBoxInline
