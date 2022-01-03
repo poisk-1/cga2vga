@@ -5,15 +5,48 @@ import chisel3.util.log2Ceil
 import chisel3.util.Cat
 import chisel3.util.Fill
 import chisel3.util.log2Floor
+import chisel3.internal.firrtl.Width
+import chisel3.experimental.Analog
 
-class PMODPin extends Bundle {
-  val I = Input(Bool())
-  val O = Output(Bool())
-  val T = Output(Bool())
+class IOBUF extends BlackBox {
+  val io = IO(new Bundle {
+    val IO = Analog(1.W)
+    val I = Input(Bool())
+    val O = Output(Bool())
+    val T = Input(Bool())
+  })
 }
 
-class PMOD extends Bundle {
-  val pins = Vec(8, new PMODPin())
+class IOBUFInput(width: Int) extends RawModule {
+  val io = IO(new Bundle {
+    val IO = Vec(width, Analog(1.W))
+    val O = Output(UInt(width.W))
+  })
+
+  val o = for (i <- 0 until width) yield {
+    val ioBuf = Module(new IOBUF())
+    ioBuf.io.IO <> io.IO(i)
+    ioBuf.io.I := false.B
+    ioBuf.io.T := true.B
+
+    ioBuf.io.O
+  }
+
+  io.O := Cat(o.reverse)
+}
+
+class IOBUFOutput(width: Int) extends RawModule {
+  val io = IO(new Bundle {
+    val IO = Vec(width, Analog(1.W))
+    val I = Input(UInt(width.W))
+  })
+
+  val o = for (i <- 0 until width) yield {
+    val ioBuf = Module(new IOBUF())
+    ioBuf.io.IO <> io.IO(i)
+    ioBuf.io.I := io.I(i)
+    ioBuf.io.T := false.B
+  }
 }
 
 class Top extends RawModule {
@@ -53,29 +86,56 @@ class Top extends RawModule {
   val GEN_V_BPORCH_ADJ = GEN_V_BPORCH + (GEN_V_ACTIVE - GEN_V_ACTIVE_ADJ) / 2
   val GEN_V_FPORCH_ADJ = GEN_V_FPORCH + (GEN_V_ACTIVE - GEN_V_ACTIVE_ADJ) / 2
 
+  val SYMBOL_WIDTH = 8
+  val SYMBOL_HEIGHT = 8
+  val SYMBOL_V_CENTER = GEN_V_ACTIVE_ADJ / 2
+  val SYMBOL_H_CENTER = GEN_H_ACTIVE / 2
+  val SYMBOL_V_TOP = SYMBOL_V_CENTER - SYMBOL_HEIGHT / 2
+  val SYMBOL_V_BOTTOM = SYMBOL_V_CENTER + SYMBOL_HEIGHT / 2
+  val SYMBOL_H_LEFT = SYMBOL_H_CENTER - SYMBOL_WIDTH / 2
+  val SYMBOL_H_RIGHT = SYMBOL_H_CENTER + SYMBOL_WIDTH / 2
+
   val io = IO(new Bundle {
     val reset = Input(Bool())
 
     // 25 MHz
     val genClock = Input(Clock())
-    val genPmodGreenSync = new PMOD()
-    val genPmodRedBlue = new PMOD()
+    val genSync = Vec(2, Analog(1.W))
+    val genGreen = Vec(4, Analog(1.W))
+    val genRed = Vec(4, Analog(1.W))
+    val genBlue = Vec(4, Analog(1.W))
 
     // 15 MHz * CAP_CLOCK_MULTIPLE
     val capClock = Input(Clock())
-    val capPmod = new PMOD()
+    val capSync = Vec(2, Analog(1.W))
+    val capRgbi = Vec(4, Analog(1.W))
+
+    val pushButtons = Vec(2, Analog(1.W))
 
     val address = Output(UInt(log2Ceil(CAP_H_ACTIVE * CAP_V_ACTIVE).W))
     val valid = Output(Bool())
     val rgbi = Output(UInt(4.W))
   })
 
-  for (i <- 0 until 8) {
-    io.capPmod.pins(i).T := true.B
-    io.capPmod.pins(i).O := false.B
-    io.genPmodGreenSync.pins(i).T := false.B
-    io.genPmodRedBlue.pins(i).T := false.B
-  }
+  val capSyncIoBuf = Module(new IOBUFInput(2))
+  val capRgbiIoBuf = Module(new IOBUFInput(4))
+
+  capSyncIoBuf.io.IO <> io.capSync
+  capRgbiIoBuf.io.IO <> io.capRgbi
+
+  val genSyncIoBuf = Module(new IOBUFOutput(2))
+  val genRedIoBuf = Module(new IOBUFOutput(4))
+  val genGreenIoBuf = Module(new IOBUFOutput(4))
+  val genBlueIoBuf = Module(new IOBUFOutput(4))
+
+  genSyncIoBuf.io.IO <> io.genSync
+  genRedIoBuf.io.IO <> io.genRed
+  genGreenIoBuf.io.IO <> io.genGreen
+  genBlueIoBuf.io.IO <> io.genBlue
+
+  val pushButtonsIoBuf = Module(new IOBUFInput(2))
+
+  pushButtonsIoBuf.io.IO <> io.pushButtons
 
   val frameBuffer = Module(new RAM(4, CAP_H_ACTIVE * CAP_V_ACTIVE))
 
@@ -91,26 +151,18 @@ class Top extends RawModule {
 
     val hSync =
       RegNext(
-        RegNext(io.capPmod.pins(0).I, (!CAP_H_POLARITY).B),
+        RegNext(capSyncIoBuf.io.O(0), (!CAP_H_POLARITY).B),
         (!CAP_H_POLARITY).B
       )
     val vSync =
       RegNext(
-        RegNext(io.capPmod.pins(1).I, (!CAP_V_POLARITY).B),
+        RegNext(capSyncIoBuf.io.O(1), (!CAP_V_POLARITY).B),
         (!CAP_V_POLARITY).B
       )
     val rgbi =
       RegNext(
         RegNext(
-          RegNext(
-            Cat(
-              io.capPmod.pins(7).I,
-              io.capPmod.pins(6).I,
-              io.capPmod.pins(5).I,
-              io.capPmod.pins(4).I
-            ),
-            0.U
-          ),
+          RegNext(capRgbiIoBuf.io.O, 0.U),
           0.U
         ),
         0.U
@@ -178,7 +230,7 @@ class Top extends RawModule {
     )
 
     val hSync = RegNext(hGen.io.sync)
-    io.genPmodGreenSync.pins(4).O := hSync
+    val vSync = Wire(Bool())
 
     hAddress := hGen.io.address - GEN_H_BPORCH.U
     hValid := hGen.io.valid && (hGen.io.address >= GEN_H_BPORCH.U) && (hGen.io.address < (GEN_H_BPORCH + GEN_H_ACTIVE).U)
@@ -193,24 +245,65 @@ class Top extends RawModule {
           )
         )
 
-      val vSync = RegNext(vGen.io.sync)
-      io.genPmodGreenSync.pins(5).O := vSync
+      vSync := RegNext(vGen.io.sync)
 
       vAddress := vGen.io.address - GEN_V_BPORCH_ADJ.U
       vValid := vGen.io.valid && (vGen.io.address >= GEN_V_BPORCH_ADJ.U) && (vGen.io.address < (GEN_V_BPORCH_ADJ + GEN_V_ACTIVE_ADJ).U)
     }
 
-    io.genPmodGreenSync.pins(6).O := false.B
-    io.genPmodGreenSync.pins(7).O := false.B
+    genSyncIoBuf.io.I := Cat(vSync, hSync)
 
-    frameBuffer.io.enb := vValid && hValid
+    frameBuffer.io.enb := true.B
     frameBuffer.io.web := false.B
     frameBuffer.io.addrb := ((vAddress >> log2Ceil(
       GEN_TO_CAP_V_RATIO
     )) * GEN_H_ACTIVE.U + hAddress)
 
-    val rgbi = frameBuffer.io.dob
+    val symbolsROM = Module(new SymbolsROM(8, 8 * 5))
+
+    symbolsROM.io.clk := io.genClock
+    symbolsROM.io.addr := vAddress - SYMBOL_V_TOP.U
+    symbolsROM.io.en := true.B
+
+    /*val SYMBOL_COUNTER = 25000000
+
+    val symbolCounter = RegInit(UInt(log2Ceil(SYMBOL_COUNTER).W), 0.U)
+    val symbolPressed =
+      RegNext(
+        RegNext(pushButtonsIoBuf.io.O(0), false.B),
+        false.B
+      )
+
+    when(symbolCounter === 0.U) {
+      when(symbolPressed === true.B) {
+        symbolCounter := SYMBOL_COUNTER.U
+      }
+    }.otherwise {
+      symbolCounter := symbolCounter - 1.U
+    }*/
+
+    val rgbi = Wire(UInt(4.W))
     val rgbiValid = RegNext(vValid && hValid)
+
+    /*val rgbiSymbolActive = RegNext(
+      vAddress >= SYMBOL_V_TOP.U && vAddress < SYMBOL_V_BOTTOM.U && hAddress >= SYMBOL_H_LEFT.U && hAddress < SYMBOL_H_RIGHT.U
+    )
+    val rgbiSymbolPosition =
+      RegNext(
+        (SYMBOL_WIDTH - 1).U - (hAddress - SYMBOL_H_LEFT.U)
+      )
+
+    when(rgbiValid && rgbiSymbolActive && symbolCounter =/= 0.U) {
+      rgbi := Cat(
+        true.B,
+        false.B,
+        false.B,
+        symbolsROM.io.dout(rgbiSymbolPosition)
+      )
+    }.otherwise {
+    }*/
+
+    rgbi := frameBuffer.io.dob
 
     def assignChannel(channel: UInt, i: Int) =
       when(rgbiValid) {
@@ -223,19 +316,9 @@ class Top extends RawModule {
         channel := 0.U
       }
 
-    val green = Wire(UInt(4.W))
-    val red = Wire(UInt(4.W))
-    val blue = Wire(UInt(4.W))
-
-    assignChannel(red, 0)
-    assignChannel(green, 1)
-    assignChannel(blue, 2)
-
-    for (i <- 0 until 4) {
-      io.genPmodGreenSync.pins(i).O := green(i)
-      io.genPmodRedBlue.pins(i).O := red(i)
-      io.genPmodRedBlue.pins(i + 4).O := blue(i)
-    }
+    assignChannel(genRedIoBuf.io.I, 0)
+    assignChannel(genGreenIoBuf.io.I, 1)
+    assignChannel(genBlueIoBuf.io.I, 2)
   }
 }
 
