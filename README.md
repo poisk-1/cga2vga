@@ -12,4 +12,4 @@ Converts RGBI/HSYNC/VSYNC TTL signal at 15 MHz pixel clock and 640 by 200 resolu
 
 ## Vivado design
 
-![Schematics](/doc/schematics.pdf)
+![Schematics](/doc/design.png)
