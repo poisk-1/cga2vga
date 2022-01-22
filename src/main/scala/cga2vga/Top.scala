@@ -101,20 +101,20 @@ class Top extends RawModule {
     // 25 MHz
     val genClock = Input(Clock())
     val genSync = Vec(2, Analog(1.W))
-    val genGreen = Vec(4, Analog(1.W))
-    val genRed = Vec(4, Analog(1.W))
-    val genBlue = Vec(4, Analog(1.W))
+    val genGreen = Vec(2, Analog(1.W))
+    val genRed = Vec(2, Analog(1.W))
+    val genBlue = Vec(2, Analog(1.W))
 
     // 15 MHz * CAP_CLOCK_MULTIPLE
     val capClock = Input(Clock())
     val capSync = Vec(2, Analog(1.W))
     val capRgbi = Vec(4, Analog(1.W))
 
-    val pushButtons = Vec(2, Analog(1.W))
+    val pushButtons = Vec(1, Analog(1.W))
 
-    val address = Output(UInt(log2Ceil(CAP_H_ACTIVE * CAP_V_ACTIVE).W))
-    val valid = Output(Bool())
-    val rgbi = Output(UInt(4.W))
+    //val address = Output(UInt(log2Ceil(CAP_H_ACTIVE * CAP_V_ACTIVE).W))
+    //val valid = Output(Bool())
+    //val rgbi = Output(UInt(4.W))
   })
 
   val capSyncIoBuf = Module(new IOBUFInput(2))
@@ -124,16 +124,16 @@ class Top extends RawModule {
   capRgbiIoBuf.io.IO <> io.capRgbi
 
   val genSyncIoBuf = Module(new IOBUFOutput(2))
-  val genRedIoBuf = Module(new IOBUFOutput(4))
-  val genGreenIoBuf = Module(new IOBUFOutput(4))
-  val genBlueIoBuf = Module(new IOBUFOutput(4))
+  val genRedIoBuf = Module(new IOBUFOutput(2))
+  val genGreenIoBuf = Module(new IOBUFOutput(2))
+  val genBlueIoBuf = Module(new IOBUFOutput(2))
 
   genSyncIoBuf.io.IO <> io.genSync
   genRedIoBuf.io.IO <> io.genRed
   genGreenIoBuf.io.IO <> io.genGreen
   genBlueIoBuf.io.IO <> io.genBlue
 
-  val pushButtonsIoBuf = Module(new IOBUFInput(2))
+  val pushButtonsIoBuf = Module(new IOBUFInput(1))
 
   pushButtonsIoBuf.io.IO <> io.pushButtons
 
@@ -209,9 +209,9 @@ class Top extends RawModule {
     frameBuffer.io.addra := vAddress * CAP_H_ACTIVE.U + hAddress
     frameBuffer.io.dia := rgbi
 
-    io.valid := frameBuffer.io.ena
-    io.address := frameBuffer.io.addra
-    io.rgbi := frameBuffer.io.dia
+    //io.valid := frameBuffer.io.ena
+    //io.address := frameBuffer.io.addra
+    //io.rgbi := frameBuffer.io.dia
   }
 
   withClockAndReset(io.genClock, io.reset) {
@@ -259,13 +259,13 @@ class Top extends RawModule {
       GEN_TO_CAP_V_RATIO
     )) * GEN_H_ACTIVE.U + hAddress)
 
-    val symbolsROM = Module(new SymbolsROM(8, 8 * 5))
+    /*val symbolsROM = Module(new SymbolsROM(8, 8 * 5))
 
     symbolsROM.io.clk := io.genClock
     symbolsROM.io.addr := vAddress - SYMBOL_V_TOP.U
     symbolsROM.io.en := true.B
 
-    /*val SYMBOL_COUNTER = 25000000
+    val SYMBOL_COUNTER = 25000000
 
     val symbolCounter = RegInit(UInt(log2Ceil(SYMBOL_COUNTER).W), 0.U)
     val symbolPressed =
@@ -307,11 +307,7 @@ class Top extends RawModule {
 
     def assignChannel(channel: UInt, i: Int) =
       when(rgbiValid) {
-        when(rgbi(3) === true.B) {
-          channel := Fill(4, rgbi(i))
-        }.otherwise {
-          channel := Cat(0.U, Fill(3, rgbi(i)))
-        }
+        channel := Cat(rgbi(3), rgbi(i))
       }.otherwise {
         channel := 0.U
       }
