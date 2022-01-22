@@ -10,7 +10,7 @@ Converts RGBI/HSYNC/VSYNC TTL signal at 15 MHz pixel clock and 640 by 200 resolu
 
     $ sbt test
 
-## Vivado design
+## Vivado design for Cmod A7-15
 
 ![Schematics](/doc/design.png)
 
