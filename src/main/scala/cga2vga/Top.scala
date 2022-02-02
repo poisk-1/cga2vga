@@ -101,9 +101,7 @@ class Top extends RawModule {
     // 25 MHz
     val genClock = Input(Clock())
     val genSync = Vec(2, Analog(1.W))
-    val genGreen = Vec(2, Analog(1.W))
-    val genRed = Vec(2, Analog(1.W))
-    val genBlue = Vec(2, Analog(1.W))
+    val genRgbi = Vec(4, Analog(1.W))
 
     // 15 MHz * CAP_CLOCK_MULTIPLE
     val capClock = Input(Clock())
@@ -112,9 +110,11 @@ class Top extends RawModule {
 
     val pushButtons = Vec(1, Analog(1.W))
 
-    //val address = Output(UInt(log2Ceil(CAP_H_ACTIVE * CAP_V_ACTIVE).W))
-    //val valid = Output(Bool())
-    //val rgbi = Output(UInt(4.W))
+    val address = Output(UInt(log2Ceil(CAP_H_ACTIVE * CAP_V_ACTIVE).W))
+    val valid = Output(Bool())
+    val rgbi = Output(UInt(4.W))
+    val hSync = Output(Bool())
+    val vSync = Output(Bool())
   })
 
   val capSyncIoBuf = Module(new IOBUFInput(2))
@@ -124,14 +124,10 @@ class Top extends RawModule {
   capRgbiIoBuf.io.IO <> io.capRgbi
 
   val genSyncIoBuf = Module(new IOBUFOutput(2))
-  val genRedIoBuf = Module(new IOBUFOutput(2))
-  val genGreenIoBuf = Module(new IOBUFOutput(2))
-  val genBlueIoBuf = Module(new IOBUFOutput(2))
+  val genRgbiIoBuf = Module(new IOBUFOutput(4))
 
   genSyncIoBuf.io.IO <> io.genSync
-  genRedIoBuf.io.IO <> io.genRed
-  genGreenIoBuf.io.IO <> io.genGreen
-  genBlueIoBuf.io.IO <> io.genBlue
+  genRgbiIoBuf.io.IO <> io.genRgbi
 
   val pushButtonsIoBuf = Module(new IOBUFInput(1))
 
@@ -159,6 +155,7 @@ class Top extends RawModule {
         RegNext(capSyncIoBuf.io.O(1), (!CAP_V_POLARITY).B),
         (!CAP_V_POLARITY).B
       )
+
     val rgbi =
       RegNext(
         RegNext(
@@ -167,6 +164,9 @@ class Top extends RawModule {
         ),
         0.U
       )
+
+    io.hSync := hSync
+    io.vSync := vSync
 
     val hCap = Module(
       new Capture(
@@ -209,9 +209,9 @@ class Top extends RawModule {
     frameBuffer.io.addra := vAddress * CAP_H_ACTIVE.U + hAddress
     frameBuffer.io.dia := rgbi
 
-    //io.valid := frameBuffer.io.ena
-    //io.address := frameBuffer.io.addra
-    //io.rgbi := frameBuffer.io.dia
+    io.valid := frameBuffer.io.ena
+    io.address := frameBuffer.io.addra
+    io.rgbi := frameBuffer.io.dia
   }
 
   withClockAndReset(io.genClock, io.reset) {
@@ -305,16 +305,11 @@ class Top extends RawModule {
 
     rgbi := frameBuffer.io.dob
 
-    def assignChannel(channel: UInt, i: Int) =
-      when(rgbiValid) {
-        channel := Cat(rgbi(3), rgbi(i))
-      }.otherwise {
-        channel := 0.U
-      }
-
-    assignChannel(genRedIoBuf.io.I, 0)
-    assignChannel(genGreenIoBuf.io.I, 1)
-    assignChannel(genBlueIoBuf.io.I, 2)
+    when(rgbiValid) {
+      genRgbiIoBuf.io.I := rgbi
+    }.otherwise {
+      genRgbiIoBuf.io.I := 0.U
+    }
   }
 }
 
