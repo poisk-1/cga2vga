@@ -2228,7 +2228,7 @@
     (in_bom yes) (on_board yes) (fields_autoplaced)
     (uuid 4b708762-d3c8-47bb-814c-3cc2597abb3e)
     (property "Reference" "J1" (id 0) (at 115.57 44.2935 0))
-    (property "Value" "Conn_02x24_Counter_Clockwise" (id 1) (at 115.57 47.0686 0))
+    (property "Value" "Cmod A7-15T" (id 1) (at 115.57 47.0686 0))
     (property "Footprint" "Package_DIP:DIP-48_W15.24mm_Socket" (id 2) (at 114.3 77.47 0)
       (effects (font (size 1.27 1.27)) hide)
     )
@@ -2934,7 +2934,7 @@
       (reference "D3") (unit 1) (value "1N4007") (footprint "Diode_THT:D_A-405_P7.62mm_Horizontal")
     )
     (path "/4b708762-d3c8-47bb-814c-3cc2597abb3e"
-      (reference "J1") (unit 1) (value "Conn_02x24_Counter_Clockwise") (footprint "Package_DIP:DIP-48_W15.24mm_Socket")
+      (reference "J1") (unit 1) (value "Cmod A7-15T") (footprint "Package_DIP:DIP-48_W15.24mm_Socket")
     )
     (path "/1cf519d2-be13-4b0e-872d-366d38fed7f6"
       (reference "J2") (unit 1) (value "CGA") (footprint "cga2vga:LD09S13A4GX00LF")
