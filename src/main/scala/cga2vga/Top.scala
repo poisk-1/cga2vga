@@ -101,7 +101,8 @@ class Top extends RawModule {
     // 25 MHz
     val genClock = Input(Clock())
     val genSync = Vec(2, Analog(1.W))
-    val genRgbi = Vec(4, Analog(1.W))
+    val genRgb0 = Vec(3, Analog(1.W))
+    val genRgb1 = Vec(3, Analog(1.W))
 
     // 15 MHz * CAP_CLOCK_MULTIPLE
     val capClock = Input(Clock())
@@ -124,10 +125,12 @@ class Top extends RawModule {
   capRgbiIoBuf.io.IO <> io.capRgbi
 
   val genSyncIoBuf = Module(new IOBUFOutput(2))
-  val genRgbiIoBuf = Module(new IOBUFOutput(4))
+  val genRgb0IoBuf = Module(new IOBUFOutput(3))
+  val genRgb1IoBuf = Module(new IOBUFOutput(3))
 
   genSyncIoBuf.io.IO <> io.genSync
-  genRgbiIoBuf.io.IO <> io.genRgbi
+  genRgb0IoBuf.io.IO <> io.genRgb0
+  genRgb1IoBuf.io.IO <> io.genRgb1
 
   val pushButtonsIoBuf = Module(new IOBUFInput(1))
 
@@ -306,9 +309,11 @@ class Top extends RawModule {
     rgbi := frameBuffer.io.dob
 
     when(rgbiValid) {
-      genRgbiIoBuf.io.I := rgbi
+      genRgb0IoBuf.io.I := rgbi(2, 0)
+      genRgb1IoBuf.io.I := Fill(3, rgbi(3))
     }.otherwise {
-      genRgbiIoBuf.io.I := 0.U
+      genRgb0IoBuf.io.I := 0.U
+      genRgb1IoBuf.io.I := 0.U
     }
   }
 }
