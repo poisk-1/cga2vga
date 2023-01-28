@@ -272,23 +272,23 @@ module Top (
     Capture #(.OFFSET(CAP_HOFFSET), .VALID(CAP_HVALID * CAP_CLK_MUL)) cga_hcap(.clk(cga_clk), .reset(cga_reset), .sync(cga_hsync_b), .enable(1), .valid(cga_hvalid), .cascade_enable(cga_venable), .address(hsample_address));
     Capture #(.OFFSET(CAP_VOFFSET), .VALID(CAP_VVALID)) cga_vcap(.clk(cga_clk), .reset(cga_reset), .sync(cga_vsync_b), .enable(cga_venable), .valid(cga_vvalid), .address(cga_vaddress));
 
-    wire cga_sampler_valid;
-    wire [3:0] cga_sampler_data;
+    wire cga_ibgr_pixel_valid;
+    wire [3:0] cga_ibgr_pixel;
 
-    Sampler cga_sampler(.clk(cga_clk), .reset(cga_reset), .sample_address(hsample_address), .sample({cga_intensity_b, cga_red_b, cga_green_b, cga_blue_b}), .valid(cga_sampler_valid), .data(cga_sampler_data), .address(cga_haddress));
+    Sampler cga_sampler(.clk(cga_clk), .reset(cga_reset), .sample_address(hsample_address), .sample({cga_intensity_b, cga_blue_b, cga_green_b, cga_red_b}), .valid(cga_ibgr_pixel_valid), .data(cga_ibgr_pixel), .address(cga_haddress));
 
-    assign cga_valid = cga_vvalid & cga_hvalid & cga_sampler_valid;
+    assign cga_valid = cga_vvalid & cga_hvalid & cga_ibgr_pixel_valid;
 
     reg [15:0] cga_vaddress_r;
     reg [15:0] cga_haddress_r;
     reg cga_valid_r;
-    reg [3:0] cga_sampler_data_r;
+    reg [3:0] cga_ibgr_pixel_r;
 
     always @(posedge cga_clk) begin
         cga_vaddress_r <= cga_vaddress;
         cga_haddress_r <= cga_haddress;
         cga_valid_r <= cga_valid;
-        cga_sampler_data_r <= cga_sampler_data;
+        cga_ibgr_pixel_r <= cga_ibgr_pixel;
     end
 
     /*parameter GEN_HSYNC = 96;
@@ -321,9 +321,6 @@ module Top (
     wire vga_hvalid;
     wire vga_vvalid;
     wire vga_venable;
-    //wire [$clog2(GEN_HVALID) - 1:0] vga_haddress;
-    //wire [$clog2(GEN_VVALID) - 1:0] vga_vaddress;
-
     wire vga_hsync0;
     wire vga_vsync0;
 
@@ -331,14 +328,10 @@ module Top (
     Gen #(.SYNC(GEN_VSYNC), .BP(GEN_VBP/*_ADJ*/), .VALID(GEN_VVALID/*_ADJ*/), .FP(GEN_VFP/*_ADJ*/)) vga_vgen(.clk(vga_clk), .reset(vga_reset), .enable(vga_venable), .sync(vga_vsync0), .valid(vga_vvalid), .address(vga_vaddress));
 
     wire vga_valid0;
-    wire vga_valid;
+
     assign vga_valid0 = vga_hvalid & vga_vvalid;
-    Buffer vga_valid_buffer(.clk(vga_clk), .reset(vga_reset), .in(vga_valid0), .out(vga_valid));
 
-    Buffer vga_hsync_buffer(.clk(vga_clk), .reset(vga_reset), .in(vga_hsync0), .out(vga_hsync));
-    Buffer vga_vsync_buffer(.clk(vga_clk), .reset(vga_reset), .in(vga_vsync0), .out(vga_vsync));
-
-    wire [3:0] vga_out;
+    wire [3:0] vga_ibgr_pixel;
 
     RAM #(
     .RAM_WIDTH(4), // Specify RAM data width
@@ -347,7 +340,7 @@ module Top (
         .addra(cga_vaddress_r * CAP_HVALID + cga_haddress_r), // Port A address bus, width determined from RAM_DEPTH
         .addrb((vga_vaddress >> 2) * CAP_HVALID + (vga_haddress >> 1)), // Port B address bus, width determined from RAM_DEPTH
         //.addrb((vga_vaddress >> 1) * CAP_HVALID + vga_haddress), // Port B address bus, width determined from RAM_DEPTH
-        .dina(cga_sampler_data_r), // Port A RAM input data, width determined from RAM_WIDTH
+        .dina(cga_ibgr_pixel_r), // Port A RAM input data, width determined from RAM_WIDTH
         .dinb(0), // Port B RAM input data, width determined from RAM_WIDTH
         .clka(cga_clk), // Port A clock
         .clkb(vga_clk), // Port B clock
@@ -360,14 +353,145 @@ module Top (
         .regcea(0), // Port A output register enable
         .regceb(1), // Port B output register enable
         .douta(), // Port A RAM output data, width determined from RAM_WIDTH
-        .doutb(vga_out) // Port B RAM output data, width determined from RAM_WIDTH
+        .doutb(vga_ibgr_pixel) // Port B RAM output data, width determined from RAM_WIDTH
     );
 
-    //assign vga_red = vga_valid0 ? vga_haddress[6:5] : 0;
-    //assign vga_green = vga_valid0 ? vga_haddress[8:7] : 0;
-    //assign vga_blue = vga_valid0 ? vga_vaddress[7:6] : 0;
+    reg vga_valid1;
+    reg vga_valid2;
 
-    assign vga_red = vga_valid ? {vga_out[2], vga_out[3]} : 2'b00;
-    assign vga_green = vga_valid ? {vga_out[1], vga_out[3]} : 2'b00;
-    assign vga_blue = vga_valid ? {vga_out[0], vga_out[3]} : 2'b00;
+    reg vga_hsync1;
+    reg vga_hsync2;
+
+    reg vga_vsync1;
+    reg vga_vsync2;
+
+    reg [$clog2(GEN_HVALID) - 1:0] vga_haddress1;
+    reg [$clog2(GEN_HVALID) - 1:0] vga_haddress2;
+
+    always @(posedge vga_clk) begin
+        vga_valid1 <= vga_valid0;
+        vga_valid2 <= vga_valid1;
+
+        vga_hsync1 <= vga_hsync0;
+        vga_hsync2 <= vga_hsync1;
+
+        vga_vsync1 <= vga_vsync0;
+        vga_vsync2 <= vga_vsync1;
+
+        vga_haddress1 <= vga_haddress;
+        vga_haddress2 <= vga_haddress1;
+    end
+
+    wire [5:0] vga_b2g2r2_pixel2;
+
+    assign vga_b2g2r2_pixel2[1:0] = vga_valid2 ? {vga_ibgr_pixel[0], vga_ibgr_pixel[3]} : 0; // RI
+    assign vga_b2g2r2_pixel2[3:2] = vga_valid2 ? {vga_ibgr_pixel[1], vga_ibgr_pixel[3]} : 0; // GI
+    assign vga_b2g2r2_pixel2[5:4] = vga_valid2 ? {vga_ibgr_pixel[2], vga_ibgr_pixel[3]} : 0; // BI
+
+    reg [5:0] vga_b2g2r2_pixel_r [8:0];
+    reg vga_hsync_r [8:0];
+    reg vga_vsync_r [8:0]; 
+    reg vga_valid_r [8:0]; 
+
+    integer i;
+    
+    reg [3:0] pattern;
+    
+    always @(*) begin
+        for (i = 0; i < 4; i = i + 1) begin
+            pattern[i] = (vga_b2g2r2_pixel_r[i * 2] == 6'b101010 && vga_b2g2r2_pixel_r[i * 2] == vga_b2g2r2_pixel_r[i * 2 + 1]); 
+        end
+    end
+    
+    reg pattern_valid;
+    
+    always @(*) begin
+        pattern_valid = 1; 
+        for (i = 0; i < 8; i = i + 1) begin
+            pattern_valid = pattern_valid & vga_valid_r[i] & (vga_b2g2r2_pixel_r[i] == 6'b101010 || vga_b2g2r2_pixel_r[i] == 6'b000000 ); 
+        end
+    end
+    
+    reg [5:0] pattern_b2g2r2_pixel; 
+
+    always @(*) begin
+        case (pattern)
+            4'b0000: pattern_b2g2r2_pixel = 6'b000000;
+            4'b0001: pattern_b2g2r2_pixel = 6'b011000;
+            4'b0010: pattern_b2g2r2_pixel = 6'b110001;
+            4'b0011: pattern_b2g2r2_pixel = 6'b111000;
+            4'b0100: pattern_b2g2r2_pixel = 6'b010011;
+            4'b0101: pattern_b2g2r2_pixel = 6'b101010;
+            4'b0110: pattern_b2g2r2_pixel = 6'b110011;
+            4'b0111: pattern_b2g2r2_pixel = 6'b111011;
+            4'b1000: pattern_b2g2r2_pixel = 6'b001001;
+            4'b1001: pattern_b2g2r2_pixel = 6'b001100;
+            4'b1010: pattern_b2g2r2_pixel = 6'b101010;
+            4'b1011: pattern_b2g2r2_pixel = 6'b111101;
+            4'b1100: pattern_b2g2r2_pixel = 6'b001011;
+            4'b1101: pattern_b2g2r2_pixel = 6'b001111;
+            4'b1110: pattern_b2g2r2_pixel = 6'b101011;
+            4'b1111: pattern_b2g2r2_pixel = 6'b111111;
+        endcase
+    end
+
+    always @(posedge vga_clk) begin
+        if (!vga_reset) begin
+            vga_b2g2r2_pixel_r[0] <= 0;
+            vga_hsync_r[0] <= 0;
+            vga_vsync_r[0] <= 0;
+            vga_valid_r[0] <= 0;
+        end else begin
+            vga_b2g2r2_pixel_r[0] <= vga_b2g2r2_pixel2;
+            vga_hsync_r[0] <= vga_hsync2;
+            vga_vsync_r[0] <= vga_vsync2;
+            vga_valid_r[0] <= vga_valid2;
+        end
+
+        if (!vga_reset) begin
+            for (i = 1; i <= 8; i = i + 1) begin
+                vga_b2g2r2_pixel_r[i] <= 0;
+                vga_hsync_r[i] <= 0;
+                vga_vsync_r[i] <= 0;
+                vga_valid_r[i] <= 0;
+            end
+        end else begin
+            for (i = 1; i <= 8; i = i + 1) begin
+                vga_hsync_r[i] <= vga_hsync_r[i - 1];
+                vga_vsync_r[i] <= vga_vsync_r[i - 1];
+                vga_valid_r[i] <= vga_valid_r[i - 1];
+            end
+
+            if (vga_haddress2[2:0] == 0 &&  pattern_valid) begin
+                for (i = 1; i <= 8; i = i + 1) begin
+                    vga_b2g2r2_pixel_r[i] <= pattern_b2g2r2_pixel;
+                end
+            end else begin
+                for (i = 1; i <= 8; i = i + 1) begin
+                    vga_b2g2r2_pixel_r[i] <= vga_b2g2r2_pixel_r[i - 1];
+                end
+            end
+        end
+    end
+
+    wire [5:0] vga_b2g2r2_pixel;
+    wire vga_valid;
+
+    assign vga_b2g2r2_pixel = vga_b2g2r2_pixel_r[8];
+    assign vga_hsync = vga_hsync_r[8];
+    assign vga_vsync = vga_vsync_r[8];
+    assign vga_valid = vga_valid_r[8];
+
+    /*reg [5:0] vga_color;
+    
+    
+    assign vga_red = vga_valid0 ? vga_color[5:4] : 0; 
+    assign vga_green = vga_valid0 ? vga_color[3:2] : 0;
+    assign vga_blue = vga_valid0 ? vga_color[1:0] : 0;*/ 
+
+    /*assign vga_red = vga_valid0 ? vga_haddress[6:5] : 0;
+    assign vga_green = vga_valid0 ? vga_haddress[8:7] : 0;
+    assign vga_blue = vga_valid0 ? vga_vaddress[7:6] : 0;*/
+
+    assign {vga_blue, vga_green, vga_red} = vga_b2g2r2_pixel;
 endmodule
