@@ -237,19 +237,19 @@ module Top (
     input wire cga_intensity,
     input wire vga_clk,
     input wire vga_reset,
-    output wire cga_hsync_b,
-    output wire cga_vsync_b,
-    output wire cga_blue_b,
-    output wire cga_valid,
-    output wire [15:0] cga_vaddress,
-    output wire [15:0] hsample_address,
-    output wire [15:0] cga_haddress,
+    input wire toggle_composite,
     output wire vga_hsync,
     output wire vga_vsync,
     output wire [1:0] vga_red,
     output wire [1:0] vga_green,
     output wire [1:0] vga_blue
 );
+    wire cga_intensity_b;
+    wire cga_hsync_b;
+    wire cga_vsync_b;
+    wire cga_red_b;
+    wire cga_green_b;
+    wire cga_blue_b;
 
     Buffer cga_hsync_buffer(.clk(cga_clk), .reset(cga_reset), .in(cga_hsync), .out(cga_hsync_b));
     Buffer cga_vsync_buffer(.clk(cga_clk), .reset(cga_reset), .in(cga_vsync), .out(cga_vsync_b));
@@ -258,16 +258,21 @@ module Top (
     Buffer cga_blue_buffer(.clk(cga_clk), .reset(cga_reset), .in(cga_blue), .out(cga_blue_b));
     Buffer cga_intensity_buffer(.clk(cga_clk), .reset(cga_reset), .in(cga_intensity), .out(cga_intensity_b));
 
+    wire toggle_composite_b;
+    
+    Buffer toggle_composite_buffer(.clk(vga_clk), .reset(vga_reset), .in(toggle_composite), .out(toggle_composite_b));
+
     parameter CAP_HOFFSET = 'h48e;
     parameter CAP_VOFFSET = 'h33;
+    parameter CAP_HVALID = 640;
+    parameter CAP_CLK_MUL = 8;
+    parameter CAP_VVALID = 200;
 
     wire cga_venable;
     wire cga_vvalid;
     wire cga_hvalid;
-
-    parameter CAP_HVALID = 640;
-    parameter CAP_CLK_MUL = 8;
-    parameter CAP_VVALID = 200;
+    wire [15:0] hsample_address;
+    wire [15:0] cga_vaddress;
 
     Capture #(.OFFSET(CAP_HOFFSET), .VALID(CAP_HVALID * CAP_CLK_MUL)) cga_hcap(.clk(cga_clk), .reset(cga_reset), .sync(cga_hsync_b), .enable(1), .valid(cga_hvalid), .cascade_enable(cga_venable), .address(hsample_address));
     Capture #(.OFFSET(CAP_VOFFSET), .VALID(CAP_VVALID)) cga_vcap(.clk(cga_clk), .reset(cga_reset), .sync(cga_vsync_b), .enable(cga_venable), .valid(cga_vvalid), .address(cga_vaddress));
@@ -275,8 +280,11 @@ module Top (
     wire cga_ibgr_pixel_valid;
     wire [3:0] cga_ibgr_pixel;
 
+    wire [15:0] cga_haddress;
+
     Sampler cga_sampler(.clk(cga_clk), .reset(cga_reset), .sample_address(hsample_address), .sample({cga_intensity_b, cga_blue_b, cga_green_b, cga_red_b}), .valid(cga_ibgr_pixel_valid), .data(cga_ibgr_pixel), .address(cga_haddress));
 
+    wire cga_valid;
     assign cga_valid = cga_vvalid & cga_hvalid & cga_ibgr_pixel_valid;
 
     reg [15:0] cga_vaddress_r;
@@ -291,20 +299,6 @@ module Top (
         cga_ibgr_pixel_r <= cga_ibgr_pixel;
     end
 
-    /*parameter GEN_HSYNC = 96;
-    parameter GEN_HBP = 48;
-    parameter GEN_HVALID = 640;
-    parameter GEN_HFP = 16;
-    parameter GEN_VSYNC = 2;
-    parameter GEN_VBP = 33;
-    parameter GEN_VFP = 10;
-    parameter GEN_VVALID = 480;
-    
-    parameter GEN_V_ADJ = (GEN_VVALID - (CAP_VVALID * 2));
-    parameter GEN_VBP_ADJ = GEN_VBP + (GEN_V_ADJ / 2);
-    parameter GEN_VFP_ADJ = GEN_VFP + (GEN_V_ADJ / 2);
-    parameter GEN_VVALID_ADJ = GEN_VVALID - GEN_V_ADJ;*/
-    
     parameter GEN_HSYNC = 136;
     parameter GEN_HBP = 200;
     parameter GEN_HVALID = 1280;
@@ -325,7 +319,7 @@ module Top (
     wire vga_vsync0;
 
     Gen #(.SYNC(GEN_HSYNC), .BP(GEN_HBP), .VALID(GEN_HVALID), .FP(GEN_HFP)) vga_hgen(.clk(vga_clk), .reset(vga_reset), .enable(1), .sync(vga_hsync0), .valid(vga_hvalid), .address(vga_haddress), .cascade_enable(vga_venable));
-    Gen #(.SYNC(GEN_VSYNC), .BP(GEN_VBP/*_ADJ*/), .VALID(GEN_VVALID/*_ADJ*/), .FP(GEN_VFP/*_ADJ*/)) vga_vgen(.clk(vga_clk), .reset(vga_reset), .enable(vga_venable), .sync(vga_vsync0), .valid(vga_vvalid), .address(vga_vaddress));
+    Gen #(.SYNC(GEN_VSYNC), .BP(GEN_VBP), .VALID(GEN_VVALID), .FP(GEN_VFP)) vga_vgen(.clk(vga_clk), .reset(vga_reset), .enable(vga_venable), .sync(vga_vsync0), .valid(vga_vvalid), .address(vga_vaddress));
 
     wire vga_valid0;
 
@@ -339,7 +333,6 @@ module Top (
     ) your_instance_name (
         .addra(cga_vaddress_r * CAP_HVALID + cga_haddress_r), // Port A address bus, width determined from RAM_DEPTH
         .addrb((vga_vaddress >> 2) * CAP_HVALID + (vga_haddress >> 1)), // Port B address bus, width determined from RAM_DEPTH
-        //.addrb((vga_vaddress >> 1) * CAP_HVALID + vga_haddress), // Port B address bus, width determined from RAM_DEPTH
         .dina(cga_ibgr_pixel_r), // Port A RAM input data, width determined from RAM_WIDTH
         .dinb(0), // Port B RAM input data, width determined from RAM_WIDTH
         .clka(cga_clk), // Port A clock
@@ -435,6 +428,38 @@ module Top (
         endcase
     end
 
+    parameter TOGGLE_COUNT = 83_460_000 / 10;
+
+    reg [$clog2(TOGGLE_COUNT) - 1:0] toggle_composite_counter;
+    reg toggle_composite_r;
+    reg toggle_composite_r2;
+    reg en_composite_r;
+
+    always @(posedge vga_clk) begin
+        if (!vga_reset) begin
+            toggle_composite_r <= 0;
+            toggle_composite_r2 <= 0;
+            toggle_composite_counter <= 0;
+            en_composite_r <= 0;
+        end else begin
+            toggle_composite_r <= toggle_composite_b;
+            if (toggle_composite_b != toggle_composite_r) begin
+                toggle_composite_counter <= 1;
+            end else begin 
+                if (toggle_composite_counter == TOGGLE_COUNT - 1) begin
+                    toggle_composite_counter <= 0;
+                    toggle_composite_r2 <= toggle_composite_b;
+
+                    if (toggle_composite_b && !toggle_composite_r2) begin
+                        en_composite_r <= !en_composite_r;
+                    end
+                end else if (toggle_composite_counter != 0) begin
+                    toggle_composite_counter <= toggle_composite_counter + 1;
+                end
+            end
+        end
+    end
+
     always @(posedge vga_clk) begin
         if (!vga_reset) begin
             vga_b2g2r2_pixel_r[0] <= 0;
@@ -462,7 +487,7 @@ module Top (
                 vga_valid_r[i] <= vga_valid_r[i - 1];
             end
 
-            if (vga_haddress2[2:0] == 0 &&  pattern_valid) begin
+            if (en_composite_r && vga_haddress2[2:0] == 0 && pattern_valid) begin
                 for (i = 1; i <= 8; i = i + 1) begin
                     vga_b2g2r2_pixel_r[i] <= pattern_b2g2r2_pixel;
                 end
