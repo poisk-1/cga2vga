@@ -60,8 +60,13 @@ begin
 
     sync <= sync_r;
     valid <= valid_r;
-    address <= address_r - (SYNC_LENGTH + BP_LENGTH);
-    cascade_enable <= '1' when address_r = SYNC_LENGTH + BP_LENGTH + VALID_LENGTH + FP_LENGTH - 1 else '0';
+    address <= address_r - (SYNC_LENGTH + BP_LENGTH)
+        when address_r >= (SYNC_LENGTH + BP_LENGTH) and 
+            (address_r < (SYNC_LENGTH + BP_LENGTH + VALID_LENGTH))
+        else 0;
+    cascade_enable <= '1'
+        when address_r = SYNC_LENGTH + BP_LENGTH + VALID_LENGTH + FP_LENGTH - 1
+        else '0';
 
 end architecture rtl;
 
