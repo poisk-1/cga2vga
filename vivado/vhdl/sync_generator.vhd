@@ -26,7 +26,7 @@ architecture rtl of sync_generator is
     constant VALID_START: natural := SYNC_LENGTH + BP_LENGTH;
     constant VALID_END: natural := SYNC_LENGTH + BP_LENGTH + VALID_LENGTH;
     
-    signal address_r: integer range 0 to TOTAL_LENGTH - 1;
+    signal counter: integer range 0 to TOTAL_LENGTH - 1;
 begin
     process(clk) begin
         if rising_edge(clk) then
@@ -35,37 +35,31 @@ begin
             if resetn = '0' then
                 sync <= to_stdulogic(SYNC_POLARITY);
                 valid <= '0';
-                address_r <= 0;
+                counter <= 0;
             else                
                 if enable = '1' then
-                    if address_r = TOTAL_LENGTH - 1 then
+                    if counter = TOTAL_LENGTH - 1 then
                         cascade_enable <= '1';
-                        address_r <= 0;
+                        counter <= 0;
                         sync <= to_stdulogic(SYNC_POLARITY);
                     else
-                        address_r <= address_r + 1;
-                        case address_r is
-                            when SYNC_LENGTH - 1 =>
-                                sync <= to_stdulogic(not SYNC_POLARITY);
-                                
-                            when VALID_START - 1 =>
-                                valid <= '1';
-                                
-                            when VALID_END - 1 =>
-                                valid <= '0';
-                                
-                            when others =>
-                                null;
-                                
-                        end case;
+                        counter <= counter + 1;
+
+                        if counter = SYNC_LENGTH - 1 then
+                            sync <= to_stdulogic(not SYNC_POLARITY);
+                        elsif counter = VALID_START - 1 then
+                            valid <= '1';
+                        elsif counter = VALID_END - 1 then
+                            valid <= '0';
+                        end if;
                     end if;
                 end if;
             end if;
         end if;
     end process;
 
-    address <= address_r - VALID_START
-        when address_r >= VALID_START and address_r < VALID_END
+    address <= counter - VALID_START
+        when counter >= VALID_START and counter < VALID_END
         else 0;
 
 end architecture rtl;

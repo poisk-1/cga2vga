@@ -1,7 +1,6 @@
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
-use std.env.finish;
 
 entity vga_sync_generator_tb is
 end entity vga_sync_generator_tb;
@@ -32,11 +31,5 @@ begin
 
     clk <= not clk after (CYCLE_TIME / 2);
     resetn <= '1' after (CYCLE_TIME * 2);
-        
-    process begin
-        wait for 100 ms;
-        
-        finish;
-    end process;
         
 end architecture tb;

@@ -1,7 +1,6 @@
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
-use std.env.finish;
 
 entity sync_generator_tb is
 end entity sync_generator_tb;
@@ -29,10 +28,12 @@ architecture tb of sync_generator_tb is
     signal sync_prev: std_ulogic;
     
     signal valid: std_ulogic;
-    signal valid_prev: std_ulogic;    
+    signal valid_prev: std_ulogic;
     
     signal cascade_enable: std_ulogic;
     signal cascade_enable_prev: std_ulogic;
+
+    signal address: integer;
     
     signal enable_counter: integer range 0 to (ENABLE_DIVIDER - 1) := 0;
     
@@ -52,12 +53,13 @@ begin
             enable => enable,
             sync => sync,
             valid => valid,
+            address => address,
             cascade_enable => cascade_enable);
 
     clk <= not clk after (CYCLE_TIME / 2);
     resetn <= '1' after (CYCLE_TIME * 2);
     
-    process(clk) begin
+    make_enable: process(clk) begin
         if rising_edge(clk) then
             enable <= '0'; 
             if enable_counter = (ENABLE_DIVIDER - 1) then
@@ -67,13 +69,13 @@ begin
                 enable_counter <= enable_counter + 1;
             end if;
         end if;
-    end process;
+    end process make_enable;
     
     sync_prev <= sync;
     valid_prev <= valid;
     cascade_enable_prev <= cascade_enable;
 
-    process begin
+    test_sync: process begin
         wait on sync;
 
         if sync = to_stdulogic(not SYNC_POLARITY) and sync_prev = to_stdulogic(SYNC_POLARITY) then
@@ -93,11 +95,11 @@ begin
             
             assert cascade_enable = '1' and cascade_enable_prev ='0'
             report "bad cascade_enable"
-            severity failure;                                                                                                
+            severity failure;
         end if;
-    end process;
+    end process test_sync;
 
-    process begin
+    test_cascade_enable: process begin
         wait on cascade_enable;
         
         if cascade_enable = '0' and cascade_enable_prev ='1' then
@@ -105,9 +107,9 @@ begin
             report "bad not cascade_enable"
             severity failure;                                    
         end if;
-    end process;
+    end process test_cascade_enable;
 
-    process begin
+    test_valid: process begin
         wait on valid;
 
         if valid = '1' and valid_prev = '0' then
@@ -123,16 +125,32 @@ begin
             report "bad valid"
             severity failure;
         end if;
-    end process;
-    
-    process begin
+    end process test_valid;
+
+    test_address: process begin
+        wait on valid;
+
+        if valid = '1' and valid_prev = '0' then
+            wait for ENABLE_CYCLE_TIME;
+            
+            for i in 0 to VALID_LENGTH - 1 loop
+                assert address = i
+                report "bad address"
+                severity failure;
+                
+                wait for ENABLE_CYCLE_TIME;
+            end loop;
+        end if;
+    end process test_address;
+
+    test_sync_count: process begin
         wait for TEST_TIME;
         
         assert sync_count = TEST_CYCLES
         report "no sync"
         severity failure;
-    
-        finish;
-    end process;
+
+        wait;
+    end process test_sync_count;
     
 end architecture tb;
