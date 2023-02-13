@@ -37,23 +37,20 @@ package body top_types is
         constant H_COLOR_ADDRESS_MAX: natural := 2 ** H_COLOR_ADDRESS_BITS;
         constant V_COLOR_ADDRESS_MAX: natural := 2 ** V_COLOR_ADDRESS_BITS;
 
-        variable h_color_offset: integer;
-        variable v_color_offset: integer;
+        constant H_COLOR_OFFSET: integer := (h_address_max - H_COLOR_ADDRESS_MAX) / 2;
+        constant V_COLOR_OFFSET: integer := (v_address_max - V_COLOR_ADDRESS_MAX) / 2;
 
         variable h_color_address: std_ulogic_vector(H_COLOR_ADDRESS_BITS - 1 downto 0);
         variable v_color_address: std_ulogic_vector(V_COLOR_ADDRESS_BITS - 1 downto 0);    
     begin
-        v_color_offset := (v_address_max - V_COLOR_ADDRESS_MAX) / 2;
-        h_color_offset := (h_address_max - H_COLOR_ADDRESS_MAX) / 2;
-
         if
-            v_address >= v_color_offset and
-            v_address < (v_color_offset + V_COLOR_ADDRESS_MAX) and
-            h_address >= h_color_offset and
-            h_address < (h_color_offset + H_COLOR_ADDRESS_MAX) then
+            v_address >= V_COLOR_OFFSET and
+            v_address < (V_COLOR_OFFSET + V_COLOR_ADDRESS_MAX) and
+            h_address >= H_COLOR_OFFSET and
+            h_address < (H_COLOR_OFFSET + H_COLOR_ADDRESS_MAX) then
 
-            h_color_address := std_ulogic_vector(to_unsigned(h_address - h_color_offset, h_color_address'length));
-            v_color_address := std_ulogic_vector(to_unsigned(v_address - v_color_offset, v_color_address'length));
+            h_color_address := std_ulogic_vector(to_unsigned(h_address - H_COLOR_OFFSET, h_color_address'length));
+            v_color_address := std_ulogic_vector(to_unsigned(v_address - V_COLOR_OFFSET, v_color_address'length));
     
             return (
                 r => h_color_address(H_COLOR_ADDRESS_BITS - 3 downto H_COLOR_ADDRESS_BITS - 4),
