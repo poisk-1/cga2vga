@@ -9,4 +9,58 @@ package top_types is
         b: vga_color;
         r: vga_color;
     end record vga_pixel;
+
+    function vga_pixel_black return vga_pixel;
+
+    function vga_color_test(
+        v_address: integer;
+        v_address_max: integer;
+        h_address: integer;
+        h_address_max: integer) return vga_pixel;
 end top_types;
+
+package body top_types is
+    function vga_pixel_black return vga_pixel is
+    begin
+        return (r => "00", g => "00", b => "00");
+    end function vga_pixel_black;
+
+    function vga_color_test(
+        v_address: integer;
+        v_address_max: integer;
+        h_address: integer;
+        h_address_max: integer) return vga_pixel is
+
+        constant H_COLOR_ADDRESS_BITS: natural := 10;
+        constant V_COLOR_ADDRESS_BITS: natural := 9;
+
+        constant H_COLOR_ADDRESS_MAX: natural := 2 ** H_COLOR_ADDRESS_BITS;
+        constant V_COLOR_ADDRESS_MAX: natural := 2 ** V_COLOR_ADDRESS_BITS;
+
+        variable h_color_offset: integer;
+        variable v_color_offset: integer;
+
+        variable h_color_address: std_ulogic_vector(H_COLOR_ADDRESS_BITS - 1 downto 0);
+        variable v_color_address: std_ulogic_vector(V_COLOR_ADDRESS_BITS - 1 downto 0);    
+    begin
+        v_color_offset := (v_address_max - V_COLOR_ADDRESS_MAX) / 2;
+        h_color_offset := (h_address_max - H_COLOR_ADDRESS_MAX) / 2;
+
+        if
+            v_address >= v_color_offset and
+            v_address < (v_color_offset + V_COLOR_ADDRESS_MAX) and
+            h_address >= h_color_offset and
+            h_address < (h_color_offset + H_COLOR_ADDRESS_MAX) then
+
+            h_color_address := std_ulogic_vector(to_unsigned(h_address - h_color_offset, h_color_address'length));
+            v_color_address := std_ulogic_vector(to_unsigned(v_address - v_color_offset, v_color_address'length));
+    
+            return (
+                r => h_color_address(H_COLOR_ADDRESS_BITS - 3 downto H_COLOR_ADDRESS_BITS - 4),
+                g => h_color_address(H_COLOR_ADDRESS_BITS - 1 downto H_COLOR_ADDRESS_BITS - 2),
+                b => v_color_address(V_COLOR_ADDRESS_BITS - 1 downto V_COLOR_ADDRESS_BITS - 2));
+        else
+            return vga_pixel_black;
+        end if;
+    end function vga_color_test;        
+end package body;

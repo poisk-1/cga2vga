@@ -22,22 +22,33 @@ architecture rtl of top is
     signal vga_v_address: integer;
 
     signal vga_pixel: work.top_types.vga_pixel;
-    signal vga_h_address_v: std_ulogic_vector(10 downto 0);
-    signal vga_v_address_v: std_ulogic_vector(9 downto 0);
+
+    constant VGA_H_SYNC_LENGTH: natural := 136;
+    constant VGA_H_BP_LENGTH: natural := 200;
+    constant VGA_H_VALID_LENGTH: natural := 1280;
+    constant VGA_H_FP_LENGTH: natural := 64;
+    constant VGA_H_SYNC_POLARITY: bit := '0';
+
+    constant VGA_V_SYNC_LENGTH: natural := 3;
+    constant VGA_V_BP_LENGTH: natural := 24;
+    constant VGA_V_VALID_LENGTH: natural := 800;
+    constant VGA_V_FP_LENGTH: natural := 1;
+    constant VGA_V_SYNC_POLARITY: bit := '0';
+
 begin
     vga_sync_generator: entity work.vga_sync_generator
         generic map(
-            H_SYNC_LENGTH => 136,
-            H_BP_LENGTH => 200,
-            H_VALID_LENGTH => 1280,
-            H_FP_LENGTH => 64,
-            H_SYNC_POLARITY => '0',
+            H_SYNC_LENGTH => VGA_H_SYNC_LENGTH,
+            H_BP_LENGTH => VGA_H_BP_LENGTH,
+            H_VALID_LENGTH => VGA_H_VALID_LENGTH,
+            H_FP_LENGTH => VGA_H_FP_LENGTH,
+            H_SYNC_POLARITY => VGA_H_SYNC_POLARITY,
 
-            V_SYNC_LENGTH => 3,
-            V_BP_LENGTH => 24,
-            V_VALID_LENGTH => 800,
-            V_FP_LENGTH => 1,
-            V_SYNC_POLARITY => '0'            
+            V_SYNC_LENGTH => VGA_V_SYNC_LENGTH,
+            V_BP_LENGTH => VGA_V_BP_LENGTH,
+            V_VALID_LENGTH => VGA_V_VALID_LENGTH,
+            V_FP_LENGTH => VGA_V_FP_LENGTH,
+            V_SYNC_POLARITY => VGA_V_SYNC_POLARITY
         )
         port map (
             clk => vga_clk,
@@ -49,16 +60,10 @@ begin
             h_valid => vga_h_valid,
             h_address => vga_h_address);
 
-    vga_h_address_v <= std_ulogic_vector(to_unsigned(vga_h_address, 11));
-    vga_v_address_v <= std_ulogic_vector(to_unsigned(vga_v_address, 10));
-
-    vga_pixel <= 
-        (
-            r => vga_h_address_v(7 downto 6),
-            g => vga_h_address_v(9 downto 8),
-            b => vga_v_address_v(8 downto 7))
+    vga_pixel <=
+        work.top_types.vga_color_test(vga_v_address, VGA_V_VALID_LENGTH, vga_h_address, VGA_H_VALID_LENGTH)
             when vga_h_valid = '1' and vga_v_valid = '1' else
-        (r => "00", g => "00", b => "00");
+        work.top_types.vga_pixel_black;
 
     vga_r <= vga_pixel.r;
     vga_g <= vga_pixel.g;
