@@ -38,6 +38,7 @@ architecture tb of sync_generator_tb is
     signal enable_counter: integer range 0 to (ENABLE_DIVIDER - 1) := 0;
     
     signal sync_count: natural := 0;
+    signal valid_count: natural := 0;
 begin
     duv: entity work.sync_generator
         generic map (
@@ -113,6 +114,8 @@ begin
         wait on valid;
 
         if valid = '1' and valid_prev = '0' then
+            valid_count <= valid_count + 1;
+
             assert valid_prev'stable(ENABLE_CYCLE_TIME * (SYNC_LENGTH + BP_LENGTH))
             report "bad not valid"
             severity failure;
@@ -147,7 +150,11 @@ begin
         wait for TEST_TIME;
         
         assert sync_count = TEST_CYCLES
-        report "no sync"
+        report "bad sync count"
+        severity failure;
+
+        assert valid_count = TEST_CYCLES
+        report "bad valid count"
         severity failure;
 
         wait;
