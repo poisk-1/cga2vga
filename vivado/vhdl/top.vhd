@@ -4,6 +4,20 @@ use ieee.numeric_std.all;
 
 entity top is
     port (
+        cga_clk: in std_ulogic;
+        cga_resetn: in std_ulogic;
+        cga_hsync: in std_ulogic;
+        cga_vsync: in std_ulogic;
+        cga_red: in std_ulogic;
+        cga_green: in std_ulogic;
+        cga_blue: in std_ulogic;
+        cga_intensity: in std_ulogic;
+        
+        test0: out std_ulogic;
+        test1: out std_ulogic;
+        test2: out std_ulogic;
+        test3: out std_ulogic;
+    
         vga_clk: in std_ulogic;
         vga_resetn: in std_ulogic;
         vga_v_sync: out std_ulogic;
@@ -15,13 +29,19 @@ entity top is
 end entity top;
 
 architecture rtl of top is
+    signal cga_pixel: work.top_types.cga_pixel_t;
+    signal cga_pixel_buffered: work.top_types.cga_pixel_t;
+
+    signal cga_hsync_buffered: std_ulogic;
+    signal cga_vsync_buffered: std_ulogic;
+
     signal vga_h_valid: std_ulogic;
     signal vga_h_address: integer;
 
     signal vga_v_valid: std_ulogic;
     signal vga_v_address: integer;
 
-    signal vga_pixel: work.top_types.vga_pixel;
+    signal vga_pixel: work.top_types.vga_pixel_t;
 
     constant VGA_H_SYNC_LENGTH: natural := 136;
     constant VGA_H_BP_LENGTH: natural := 200;
@@ -36,6 +56,17 @@ architecture rtl of top is
     constant VGA_V_SYNC_POLARITY: bit := '0';
 
 begin
+    cga_pixel <= (i => cga_intensity, g => cga_green, b => cga_blue, r => cga_red);
+
+    cga_pixel_buf: entity work.buf
+        generic map(T => work.top_types.cga_pixel_t, DEPTH => 2)
+        port map (
+            clk => cga_clk,
+            din => cga_pixel,
+            dout => cga_pixel_buffered);
+            
+    (i => test0, g => test1, b => test2, r => test3) <= cga_pixel_buffered;
+
     vga_sync_generator: entity work.vga_sync_generator
         generic map(
             H_SYNC_LENGTH => VGA_H_SYNC_LENGTH,

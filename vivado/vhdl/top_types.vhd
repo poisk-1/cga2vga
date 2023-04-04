@@ -3,24 +3,31 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 package top_types is
-    subtype vga_color is std_ulogic_vector(1 downto 0);
-    type vga_pixel is record
-        g: vga_color;
-        b: vga_color;
-        r: vga_color;
-    end record vga_pixel;
+    type cga_pixel_t is record
+        i: std_ulogic;
+        g: std_ulogic;
+        b: std_ulogic;
+        r: std_ulogic;
+    end record cga_pixel_t;
 
-    function vga_pixel_black return vga_pixel;
+    subtype vga_color_t is std_ulogic_vector(1 downto 0);
+    type vga_pixel_t is record
+        g: vga_color_t;
+        b: vga_color_t;
+        r: vga_color_t;
+    end record vga_pixel_t;
+
+    function vga_pixel_black return vga_pixel_t;
 
     function vga_color_test(
         v_address: integer;
         v_address_max: integer;
         h_address: integer;
-        h_address_max: integer) return vga_pixel;
+        h_address_max: integer) return vga_pixel_t;
 end top_types;
 
 package body top_types is
-    function vga_pixel_black return vga_pixel is
+    function vga_pixel_black return vga_pixel_t is
     begin
         return (r => "00", g => "00", b => "00");
     end function vga_pixel_black;
@@ -29,7 +36,7 @@ package body top_types is
         v_address: integer;
         v_address_max: integer;
         h_address: integer;
-        h_address_max: integer) return vga_pixel is
+        h_address_max: integer) return vga_pixel_t is
 
         constant H_COLOR_ADDRESS_BITS: natural := 10;
         constant V_COLOR_ADDRESS_BITS: natural := 9;
