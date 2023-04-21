@@ -4,8 +4,9 @@ use ieee.numeric_std.all;
 
 entity sync_capture is
     generic (
-        VALID_OFFSET: natural;
+        SYNC_AND_BP_LENGTH: natural;
         VALID_LENGTH: natural;
+        MAX_FP_LENGTH: natural;
         SYNC_POLARITY: bit
     );
     port (
@@ -20,23 +21,23 @@ entity sync_capture is
 end entity sync_capture;
 
 architecture rtl of sync_capture is
-    constant TOTAL_LENGTH: natural := VALID_OFFSET + VALID_LENGTH;
+    constant TOTAL_LENGTH: natural := SYNC_AND_BP_LENGTH + VALID_LENGTH + MAX_FP_LENGTH;
+    constant SYNC_AND_BP_AND_VALID_LENGTH: natural := SYNC_AND_BP_LENGTH + VALID_LENGTH;
     
-    signal counter: integer range 0 to TOTAL_LENGTH - 1;
+    signal counter: integer range 0 to TOTAL_LENGTH;
     signal prev_sync: std_ulogic;
     signal at_edge: boolean;
 begin
-    at_edge <= sync = to_stdulogic(SYNC_POLARITY) and prev_sync = not sync;
+    at_edge <= (sync = to_stdulogic(SYNC_POLARITY)) and (prev_sync = not to_stdulogic(SYNC_POLARITY));
 
     process(clk) begin
         if rising_edge(clk) then            
             if resetn = '0' then
-                prev_sync <= '0';
+                prev_sync <= to_stdulogic(SYNC_POLARITY);
                 counter <= 0;
             else                
                 if enable = '1' then
                     prev_sync <= sync;
-
                     if at_edge then
                         counter <= 0;
                     else
@@ -48,8 +49,8 @@ begin
     end process;
 
     cascade_enable <= '1' when at_edge else '0';
-    valid <= '1' when counter >= VALID_OFFSET and counter < TOTAL_LENGTH
+    valid <= '1' when counter >= SYNC_AND_BP_LENGTH - 1 and counter < SYNC_AND_BP_AND_VALID_LENGTH - 1
         else '0';
-    address <= counter - VALID_OFFSET when valid = '1' else 0;
+    address <= counter - (SYNC_AND_BP_LENGTH - 1) when valid = '1' else 0;
 end architecture rtl;
 
