@@ -22,4 +22,4 @@ clean:
 
 .PHONY: program
 program: test.rom
-	minipro -p $(part) -w test.rom
+	minipro -p $(part) -w test.rom -u
