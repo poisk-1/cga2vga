@@ -9,11 +9,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
-      - name: Setup Scala
-        uses: olafurpg/setup-scala@v10
+      - name: Setup GHDL
+        uses: ghdl/setup-ghdl-ci@nightly
         with:
-          java-version: zulu@1.17
-      - name: Cache Scala
-        uses: coursier/cache-action@v5
-      - name: SBT Test
-        run: sbt test
+          backend: mcode
+      - name: Test
+        run: |
+          pushd vivado/vhdl
+          make init
+          make run
+          popd
